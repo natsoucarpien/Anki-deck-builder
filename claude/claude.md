@@ -1,6 +1,6 @@
 # Claude - Assistant IA
 
-Ce dossier contient les notes et le journal de bord de Claude pour le projet **LearnableMeta → Anki Deck Converter**.
+Ce dossier contient les notes et le journal de bord de Claude pour le projet **Anki Deck Builder**.
 
 ## Fichiers
 
@@ -11,15 +11,26 @@ Ce dossier contient les notes et le journal de bord de Claude pour le projet **L
 
 ## Projet
 
-Convertisseur Python qui transforme les metas du site LearnableMeta.com en decks Anki (.apkg).
+Suite d'outils Python pour créer et modifier des decks Anki (.apkg) à partir de LearnableMeta.
 
 ### Stack technique
 - Python 3.8+
 - Playwright (scraping headless)
 - Requests (download images)
+- Pillow (manipulation d'images)
 - SQLite (format Anki)
 
 ### Fichiers principaux
-- `learnablemeta_to_anki.py` - Script principal
-- `run.bat` - Lanceur Windows
-- `README.md` - Documentation utilisateur
+
+| Fichier | Description |
+|---------|-------------|
+| `learnablemeta_to_anki.py` | Extrait les metas de LearnableMeta et crée un deck .apkg |
+| `anki_image_cropper.py` | Modifie les images d'un deck existant (crop, masquage) |
+| `run_builder.bat` | Lanceur Windows pour le convertisseur |
+| `run_cropper.bat` | Lanceur Windows pour le cropper |
+| `README.md` | Documentation utilisateur |
+
+### Fonctionnalités du cropper
+
+- **Crop** : Coupe les images depuis un bord (droite, gauche, haut, bas) selon un pourcentage
+- **Masquage** : Cache un coin de l'image avec une couleur (blanc/noir) - utile pour masquer les minimaps GeoGuessr

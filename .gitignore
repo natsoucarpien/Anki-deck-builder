@@ -1,3 +1,6 @@
+# Claude Code
+.claude/
+
 # Debug files
 *debug*
 debug_output.txt
