@@ -1,0 +1,30 @@
+# Debug files
+*debug*
+debug_output.txt
+page_debug.html
+
+# Anki deck files
+*.apkg
+decks/
+
+# Test files
+*test*
+tests/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
