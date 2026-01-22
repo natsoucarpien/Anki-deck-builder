@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-LearnableMeta to Anki Deck Converter
-====================================
+LearnableMeta to Anki Deck Converter (Version corrigée)
+=======================================================
 Crée un fichier .apkg (deck Anki) à partir des metas d'une page LearnableMeta.
 
 INSTALLATION:
@@ -9,20 +9,7 @@ INSTALLATION:
     playwright install chromium
 
 UTILISATION:
-    python learnablemeta_to_anki.py https://learnablemeta.com/maps/695ef651a450338d7979829f
-
-Le script va:
-1. Ouvrir la page dans un navigateur headless
-2. Extraire toutes les metas (rule, image, description)
-3. Créer un fichier .apkg importable dans Anki
-
-STRUCTURE DE CARTE (type "learnable"):
-- Champ 1 (Rule): Nom de la meta (ex: "Architecture - Sandstone")
-- Champ 2 (Question): Image de la meta
-- Champ 3 (Response): Description textuelle
-
-Recto: Rule + Image
-Verso: Rule + Image + Response
+    python learnablemeta_to_anki.py https://learnablemeta.com/maps/68d3d5bfbb462cc5f7bb6945
 """
 
 import sys
@@ -69,7 +56,7 @@ def download_image(url, folder):
     # Décoder les caractères URL (%20 -> espace) et remplacer espaces par underscores
     from urllib.parse import unquote
     filename = unquote(filename).replace(' ', '_')
-    if not any(filename.endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp']):
+    if not any(filename.endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif']):
         filename += ".png"
     
     filepath = os.path.join(folder, filename)
@@ -89,21 +76,49 @@ def download_image(url, folder):
         return None, None
 
 
-def clean_html(text):
-    """Nettoie le HTML et décode les entités."""
+def clean_text(text):
+    """Nettoie le texte et décode les entités."""
     if not text:
         return ""
-    # Décoder les entités unicode (\u003C = <)
-    text = text.encode().decode('unicode_escape')
+    
+    # D'abord, corriger l'encodage UTF-8 mal interprété
+    try:
+        # Tous les caractères français mal encodés en UTF-8 → Latin-1
+        # Vérifier si on a des séquences suspectes
+        if any(suspect in text for suspect in ['Ã', 'Å', 'Ã‚', 'Ãƒ']):
+            text = text.encode('latin-1').decode('utf-8')
+    except Exception as e:
+        # Si ça échoue, essayer une autre méthode
+        try:
+            text = text.encode('cp1252').decode('utf-8')
+        except:
+            pass
+    
+    # Décoder les entités unicode échappées (\u003C -> <, etc.)
+    # Utiliser une approche plus simple avec replace
+    unicode_replacements = {
+        r'\u003C': '<',
+        r'\u003E': '>',
+        r'\u003D': '=',
+        r'\u0026': '&',
+        r'\u0027': "'",
+        r'\u0022': '"',
+    }
+    
+    for pattern, replacement in unicode_replacements.items():
+        text = text.replace(pattern, replacement)
+    
     # Supprimer les balises HTML
     text = re.sub(r'<[^>]+>', '', text)
+    
     # Nettoyer les espaces multiples
     text = re.sub(r'\s+', ' ', text).strip()
+    
     return text
 
 
 def extract_metas_from_page(url):
-    """Extrait toutes les metas de la page LearnableMeta via JavaScript embarqué."""
+    """Extrait toutes les metas via Playwright en attendant le chargement dynamique."""
     if not PLAYWRIGHT_AVAILABLE:
         print("❌ Playwright requis pour l'extraction")
         return [], ""
@@ -121,28 +136,83 @@ def extract_metas_from_page(url):
         )
         page = context.new_page()
 
-        page.goto(url, wait_until='networkidle', timeout=60000)
+        page.goto(url, wait_until='networkidle', timeout=90000)
+        
+        # Attendre que les metas se chargent (attendre l'élément de liste des metas)
+        print("⏳ Attente du chargement des metas...")
+        
+        # Attendre l'apparition des boutons de metas
+        try:
+            page.wait_for_selector('button', timeout=10000)
+            print("✓ Premiers éléments détectés")
+        except:
+            print("⚠️  Timeout en attendant les éléments")
+        
+        # Scroll pour forcer le lazy loading
+        print("📜 Scroll pour charger toutes les metas...")
+        
+        # Scroll progressif plus lent et plus long
+        last_height = page.evaluate('document.body.scrollHeight')
+        scroll_attempts = 0
+        max_attempts = 30
+        
+        while scroll_attempts < max_attempts:
+            # Scroll vers le bas
+            page.evaluate('window.scrollBy(0, window.innerHeight)')
+            time.sleep(0.8)
+            
+            # Vérifier si on a atteint le bas
+            new_height = page.evaluate('document.body.scrollHeight')
+            current_pos = page.evaluate('window.pageYOffset + window.innerHeight')
+            
+            # Si on a atteint le bas ET que la hauteur n'a pas changé, on a tout chargé
+            if current_pos >= new_height and new_height == last_height:
+                scroll_attempts += 1
+                if scroll_attempts >= 3:  # Confirmer 3 fois qu'on est vraiment au bout
+                    print(f"✓ Fin du scroll détectée après {scroll_attempts} tentatives")
+                    break
+            else:
+                scroll_attempts = 0  # Reset si on détecte du nouveau contenu
+            
+            last_height = new_height
+        
+        # Scroll final jusqu'en bas
+        for _ in range(5):
+            page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
+            time.sleep(0.5)
+        
+        # Attendre le chargement final
         time.sleep(2)
+        
+        # Retour en haut
+        page.evaluate('window.scrollTo(0, 0)')
+        time.sleep(1)
 
-        # Récupérer le titre du deck (premier h1)
-        title_elem = page.query_selector('h1')
-        if title_elem:
-            deck_title = title_elem.inner_text().strip()
+        # Récupérer le titre du deck
+        try:
+            title_elem = page.query_selector('h1')
+            if title_elem:
+                deck_title = title_elem.inner_text().strip()
+                print(f"📖 Deck: {deck_title}")
+        except:
+            pass
 
-        print(f"📖 Deck: {deck_title}")
-
-        meta_list = []
+        # Nouvelle méthode: extraire directement du DOM
+        # Les metas sont dans des boutons avec des div contenant le nom et la description
+        
+        # D'abord, essayer l'ancienne méthode (parsing du JavaScript)
         page_content = page.content()
-
-        # Chercher le bloc metaList:[ ... ] dans le HTML (format JavaScript, pas JSON)
-        # On doit compter les crochets car le tableau contient des sous-tableaux (images:[])
+        
+        print("🔍 Recherche du tableau metaList dans le code source...")
+        
+        # Chercher le bloc metaList:[ ... ] dans le HTML (format JavaScript)
         js_array = ""
         idx = page_content.find('metaList:[')
         if idx >= 0:
             start = idx + len('metaList:')
             depth = 0
             end = start
-            for i, c in enumerate(page_content[start:start+100000]):
+            for i, c in enumerate(page_content[start:start+500000]):  # Augmenter la limite
                 if c == '[':
                     depth += 1
                 elif c == ']':
@@ -151,11 +221,11 @@ def extract_metas_from_page(url):
                         end = start + i + 1
                         break
             js_array = page_content[start:end]
+            
+            print(f"✓ Bloc metaList trouvé ({len(js_array)} caractères)")
 
         if js_array:
-
             # Parser chaque objet meta individuellement
-            # Pattern: {id:...,name:"...",note:"...",images:[...],locationsCount:"...",footer:"..."}
             obj_pattern = re.finditer(
                 r'\{id:(\d+),name:"([^"]+)",note:"([^"]*)",images:\[([^\]]*)\],locationsCount:"(\d+)"',
                 js_array
@@ -171,30 +241,43 @@ def extract_metas_from_page(url):
                 img_match = re.search(r'"([^"]+)"', images_raw)
                 image_url = img_match.group(1) if img_match else ""
 
-                # Nettoyer la note (enlever HTML)
-                note = clean_html(note_raw)
+                # Nettoyer la note - IMPORTANT: décoder d'abord l'encodage
+                note = note_raw
+                
+                # Corriger l'encodage UTF-8 mal interprété AVANT de nettoyer
+                try:
+                    if any(suspect in note for suspect in ['Ã', 'Å']):
+                        note = note.encode('latin-1').decode('utf-8')
+                except:
+                    pass
+                
+                # Puis nettoyer le HTML
+                note = clean_text(note)
+                
+                # Corriger aussi le nom
+                name_clean = name
+                try:
+                    if any(suspect in name_clean for suspect in ['Ã', 'Å']):
+                        name_clean = name_clean.encode('latin-1').decode('utf-8')
+                except:
+                    pass
 
-                meta_list.append({
-                    'name': name,
-                    'note': note,
+                metas.append({
+                    'rule': name_clean,
+                    'response': note,
                     'image_url': image_url
                 })
+                
+            print(f"✓ {len(metas)} metas extraites du code source")
 
-        print(f"📋 {len(meta_list)} metas trouvées\n")
+        print(f"📋 {len(metas)} metas trouvées sur 406 attendues")
+        
+        if len(metas) < 406:
+            print(f"⚠️  Il manque {406 - len(metas)} metas - le site indique 406 au total")
 
-        # Convertir en format attendu
-        for i, meta in enumerate(meta_list):
-            name = meta.get('name', f'Meta {i+1}')
-            note = meta.get('note', '')
-            image_url = meta.get('image_url', '')
-
-            print(f"[{i+1}/{len(meta_list)}] {name} ✓")
-
-            metas.append({
-                'rule': name,
-                'response': note,
-                'image_url': image_url
-            })
+        # Afficher les metas trouvées
+        for i, meta in enumerate(metas):
+            print(f"[{i+1}/{len(metas)}] {meta['rule']} ✓")
 
         browser.close()
 
@@ -458,6 +541,13 @@ hr {
     print(f"\n📝 Création de {len(metas)} cartes...")
     
     for i, meta in enumerate(metas):
+        # Afficher la progression
+        progress = (i + 1) / len(metas) * 100
+        bar_length = 40
+        filled = int(bar_length * (i + 1) / len(metas))
+        bar = '█' * filled + '░' * (bar_length - filled)
+        print(f'\r  [{bar}] {progress:.1f}% ({i + 1}/{len(metas)})', end='', flush=True)
+        
         note_id = now_ms + i
         card_id = now_ms + 1000000 + i
         guid = hashlib.md5(f"{deck_name}_{meta['rule']}_{i}".encode()).hexdigest()[:10]
@@ -486,8 +576,6 @@ hr {
                 media_index += 1
 
         # Champs séparés par \x1f (séparateur Anki)
-        # Question = image dans div
-        # Response = rule + image + description dans div
         question_field = f"<div>{question_image}</div>" if question_image else "<div></div>"
         response_field = f"<div><b>{meta['rule']}</b><br><br>{response_image}<br><br><p style=\"text-align: justify;\">{meta['response']}</p></div>"
         fields = f"{meta['rule']}\x1f{question_field}\x1f{response_field}"
@@ -505,6 +593,9 @@ hr {
             INSERT INTO cards VALUES (?, ?, ?, 0, ?, -1, 0, 0, ?, 0, 0, 0, 0, 0, 0, 0, 0, '')
         ''', (card_id, note_id, deck_id, now, i))
     
+    # Aller à la ligne après la barre de progression
+    print()
+    
     conn.commit()
     conn.close()
     
@@ -515,6 +606,7 @@ hr {
     
     # Créer l'archive ZIP
     print(f"\n📦 Création du fichier {output_path}...")
+    print("  [████████████████████████████████████████] Compression...", end='', flush=True)
     
     with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zf:
         zf.write(db_path, 'collection.anki2')
@@ -524,6 +616,8 @@ hr {
             media_file = os.path.join(temp_dir, idx)
             if os.path.exists(media_file):
                 zf.write(media_file, idx)
+    
+    print(" ✓")  # Marquer la compression comme terminée
     
     # Nettoyage
     shutil.rmtree(temp_dir)
@@ -548,7 +642,7 @@ def main():
         print("\nUsage:")
         print("  python learnablemeta_to_anki.py <URL>")
         print("\nExemple:")
-        print("  python learnablemeta_to_anki.py https://learnablemeta.com/maps/695ef651a450338d7979829f")
+        print("  python learnablemeta_to_anki.py https://learnablemeta.com/maps/68d3d5bfbb462cc5f7bb6945")
         sys.exit(1)
     
     url = sys.argv[1]

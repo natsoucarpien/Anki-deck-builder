@@ -153,3 +153,16 @@ Permet de modifier l'une sans affecter l'autre.
 - "cannot identify image file" - format non reconnu par Pillow
 
 **Cause :** Certaines images sont telechargees avec extension .png mais sont en realite des AVIF ou WEBP (le serveur renvoie un format different).
+
+---
+
+### Session 12
+
+**Amélioration du script** `learnablemeta_to_anki.py`
+
+**Objectif :** méthode de détéction 
+
+**Fonctionnalites :**
+- méthode de détéction de la liste de méta plus robuste
+- barre de progression visuelle lors de la création du deck
+- prise en charge des caractères spéciaux francocphones

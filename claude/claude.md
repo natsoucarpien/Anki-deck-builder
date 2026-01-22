@@ -2,7 +2,7 @@
 
 Ce dossier contient les notes et le journal de bord de Claude pour le projet **Anki Deck Builder**.
 
-## Fichiers
+## Fichiers de documentation
 
 | Fichier | Description |
 |---------|-------------|
@@ -11,7 +11,8 @@ Ce dossier contient les notes et le journal de bord de Claude pour le projet **A
 
 ## Projet
 
-Suite d'outils Python pour créer et modifier des decks Anki (.apkg) à partir de LearnableMeta.
+Suite d'outils Python pour créer et modifier des decks Anki (.apkg) à partir de site web (LearnableMeta surtout)
+
 
 ### Stack technique
 - Python 3.8+
